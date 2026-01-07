@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Jarvis Debugger</title>
+    <style>
+        body { background-color: #1a1a1a; color: #00ffcc; font-family: monospace; text-align: center; padding: 50px; }
+        #status { font-size: 24px; margin-bottom: 20px; }
+        button { padding: 15px 30px; font-size: 20px; background: #00ffcc; border: none; cursor: pointer; border-radius: 5px; }
+        button:active { background: #009977; }
+        #log { margin-top: 20px; border: 1px solid #333; padding: 10px; height: 300px; overflow-y: scroll; text-align: left; background: #000; }
+    </style>
+</head>
+<body>
+
+    <h1>🤖 Jarvis Core Debugger</h1>
+    <div id="status">🔴 Disconnected</div>
+    <button onclick="startListening()">🎤 Click & Speak</button>
+    <div id="log"></div>
+
+    <script>
+        // 1. Connect to WebSocket
+        const ws = new WebSocket("ws://localhost:8000/ws/chat");
+        const statusDiv = document.getElementById("status");
+        const logDiv = document.getElementById("log");
+
+        ws.onopen = () => {
+            statusDiv.innerHTML = "🟢 Connected to Brain";
+            log("System: Link Established.");
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            log("🧠 Jarvis: " + JSON.stringify(data));
+
+            // Speak the response
+            if (data.type === "response" && data.text) {
+                speak(data.text);
+            }
+        };
+
+        // 2. Voice Recognition (Web Speech API)
+        const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new Recognition();
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => statusDiv.innerHTML = "👂 Listening...";
+        recognition.onend = () => statusDiv.innerHTML = "🟢 Connected (Idle)";
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            log("🗣️ You: " + transcript);
+            
+            // Send to Backend
+            ws.send(JSON.stringify({ type: "command", text: transcript }));
+        };
+
+        function startListening() {
+            recognition.start();
+        }
+
+        // 3. Text to Speech
+        function speak(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function log(msg) {
+            logDiv.innerHTML += `<div>${msg}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html>
