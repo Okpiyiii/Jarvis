@@ -28,6 +28,7 @@
             justify-content: center;
             transition: all 0.3s ease;
             margin-bottom: 30px;
+            cursor: pointer;
         }
 
         /* Active State (When hearing "Jarvis") */
@@ -35,6 +36,17 @@
             border-color: #00ffcc !important;
             box-shadow: 0 0 50px #00ffcc, inset 0 0 20px #00ffcc !important;
             transform: scale(1.1);
+        }
+
+        .listening {
+            border-color: #00aa88;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 #00aa8866; }
+            70% { box-shadow: 0 0 0 20px #00aa8800; }
+            100% { box-shadow: 0 0 0 0 #00aa8800; }
         }
 
         #status { font-size: 24px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; }
@@ -46,18 +58,16 @@
 </head>
 <body>
 
-    <div id="core">
+    <div id="core" onclick="startSystem()">
         <div style="font-size: 50px;">⚛️</div>
     </div>
 
-    <div id="status">🔴 OFFLINE</div>
-    <div style="margin-bottom: 20px; font-size: 12px; color: #555;">(Click anywhere to Start)</div>
-
+    <div id="status">🔴 OFFLINE (Click Reactor)</div>
     <div id="log"></div>
 
     <script>
         // --- CONFIGURATION ---
-        const BACKEND_URL = "ws://localhost:8000/ws/chat"; // Change if using Ngrok
+        const BACKEND_URL = "ws://localhost:8000/ws/chat"; 
         const WAKE_WORD = "jarvis"; 
         // ---------------------
 
@@ -65,12 +75,12 @@
         const core = document.getElementById("core");
         const statusDiv = document.getElementById("status");
         const logDiv = document.getElementById("log");
-        let isSpeaking = false; // Don't listen while Jarvis is speaking
+        
+        let isSpeaking = false; 
+        let recognition;
 
         // 1. WebSocket Connection
         ws.onopen = () => {
-            statusDiv.innerHTML = "🟢 SYSTEM READY";
-            statusDiv.style.color = "#00ffcc";
             log("System: Connected to Neural Net.");
         };
 
@@ -81,70 +91,81 @@
                 log("🧠 Jarvis: " + data.text, "jarvis-text");
                 speak(data.text);
             } else if (data.type === "system_stats") {
-                // Handle stats if you want (CPU/RAM)
                 console.log(data);
             }
         };
 
-        // 2. Voice Recognition (The Ears)
-        const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = new Recognition();
-        
-        recognition.continuous = true;  // Keep listening forever
-        recognition.lang = 'en-US';
-        recognition.interimResults = false;
-
-        recognition.onstart = () => {
-            statusDiv.innerHTML = "👂 LISTENING FOR 'JARVIS'...";
-        };
-
-        recognition.onend = () => {
-            // If it stops, auto-restart (Always Listening)
-            if (!isSpeaking) recognition.start();
-        };
-
-        recognition.onresult = (event) => {
-            if (isSpeaking) return; // Ignore input while Jarvis talks
-
-            const lastIndex = event.results.length - 1;
-            const transcript = event.results[lastIndex][0].transcript.trim().toLowerCase();
+        // 2. Voice Recognition Setup
+        function setupVoice() {
+            const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new Recognition();
             
-            console.log("Heard:", transcript);
+            recognition.continuous = true; 
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
 
-            // --- WAKE WORD LOGIC ---
-            if (transcript.includes(WAKE_WORD)) {
-                // Visual Effect
-                activateCore();
-                
-                log("🗣️ You: " + transcript, "user-text");
-                
-                // Send command to Backend
-                ws.send(JSON.stringify({ type: "command", text: transcript }));
-            }
-        };
+            recognition.onstart = () => {
+                if (!isSpeaking) {
+                    statusDiv.innerHTML = "👂 LISTENING...";
+                    core.classList.add("listening");
+                }
+            };
 
-        // Start listening on first click (Browser policy)
-        document.body.onclick = () => {
-            recognition.start();
-            log("System: Audio Sensors Online.");
-        };
+            recognition.onend = () => {
+                // AUTO-RESTART: Only restart if we are NOT currently speaking
+                if (!isSpeaking) {
+                    console.log("Mic stopped. Restarting...");
+                    try { recognition.start(); } catch(e) {}
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.warn("Speech Error:", event.error);
+                // Ignore 'no-speech' errors, just stay alive
+                if (event.error === 'not-allowed') {
+                    statusDiv.innerHTML = "❌ MIC BLOCKED";
+                }
+            };
+
+            recognition.onresult = (event) => {
+                if (isSpeaking) return; 
+
+                const lastIndex = event.results.length - 1;
+                const transcript = event.results[lastIndex][0].transcript.trim().toLowerCase();
+                
+                console.log("Heard:", transcript);
+
+                // Check for Wake Word
+                if (transcript.includes(WAKE_WORD)) {
+                    activateCore();
+                    log("🗣️ You: " + transcript, "user-text");
+                    ws.send(JSON.stringify({ type: "command", text: transcript }));
+                }
+            };
+        }
 
         // 3. Text to Speech (The Mouth)
         function speak(text) {
-            isSpeaking = true; // Stop listening so he doesn't hear himself
-            recognition.stop(); 
+            isSpeaking = true; 
+            try { recognition.stop(); } catch(e) {} // Stop listening
             
+            core.classList.remove("listening");
+            core.classList.add("active");
+            statusDiv.innerHTML = "🗣️ SPEAKING...";
+
             const utterance = new SpeechSynthesisUtterance(text);
-            
-            // Optional: Choose a robotic voice
             const voices = window.speechSynthesis.getVoices();
-            // Try to find a specific voice like "Google US English" or "Microsoft David"
             utterance.voice = voices.find(v => v.name.includes("Google US English")) || voices[0];
             
             utterance.onend = () => {
+                console.log("Finished speaking. Resuming listening...");
                 isSpeaking = false;
-                recognition.start(); // Resume listening after speaking
                 deactivateCore();
+                
+                // Add a tiny delay to ensure mic is ready
+                setTimeout(() => {
+                    try { recognition.start(); } catch(e) {}
+                }, 200);
             };
             
             window.speechSynthesis.speak(utterance);
@@ -152,17 +173,24 @@
 
         function activateCore() {
             core.classList.add("active");
+            core.classList.remove("listening");
             statusDiv.innerHTML = "⚡ PROCESSING...";
         }
 
         function deactivateCore() {
             core.classList.remove("active");
+            core.classList.add("listening");
             statusDiv.innerHTML = "👂 LISTENING...";
         }
 
         function log(msg, className="") {
             logDiv.innerHTML += `<div class="${className}">${msg}</div>`;
             logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function startSystem() {
+            setupVoice();
+            try { recognition.start(); } catch(e) { console.log("Already started"); }
         }
     </script>
 </body>

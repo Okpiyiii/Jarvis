@@ -10,7 +10,7 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 class JarvisBrain:
     def __init__(self):
         # Using the model that worked for you
-        self.model = genai.GenerativeModel('gemini-flash-latest')
+        self.model = genai.GenerativeModel('gemini-2.0-flash-lite')
         
         self.system_instruction = """
         You are Jarvis, a futuristic AI assistant.
