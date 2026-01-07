@@ -1,7 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
-from app.services.brain import brain        # The Brain 🧠
-from app.services.automation import automation  # The Hands 🦾
+from app.services.brain import brain
+from app.services.automation import automation
 
 router = APIRouter()
 
@@ -12,50 +12,45 @@ async def websocket_endpoint(websocket: WebSocket):
     
     try:
         while True:
-            # 1. Receive Audio/Text from Client
+            # 1. Receive Text from Frontend
             data = await websocket.receive_text()
             try:
                 message = json.loads(data)
                 user_text = message.get("text", "")
             except:
-                user_text = data # Fallback if raw text sent
+                user_text = data
 
-            print(f"User Said: {user_text}") 
+            print(f"User: {user_text}") 
 
-            # 2. ASK THE BRAIN (Gemini)
-            # The brain returns: {"action": "open_app", "args": "chrome", "reply": "Opening Chrome"}
+            # 2. Ask Brain
             decision = await brain.think(user_text)
-            
-            print(f"Brain Decided: {decision}") # Debug log
+            print(f"Brain: {decision}")
 
-            # 3. EXECUTE THE ACTION (The Hands)
+            # 3. Execute Action
             response_text = decision.get("reply")
             action = decision.get("action")
             args = decision.get("args")
 
-            # --- ACTION LOGIC ---
             if action == "open_app":
-                # Execute the automation
                 status = automation.open_app(args)
-                print(f"System: {status}")
-            
-            elif action == "system_stats":
-                # Fetch stats
-                stats = automation.get_system_stats()
-                # Send stats to frontend immediately
-                await websocket.send_text(json.dumps(stats))
+                # Optional: Append status to reply if needed
                 
-            # 4. SEND FINAL RESPONSE TO FRONTEND
-            # This is what the Frontend will SPEAK out loud
+            elif action == "media_control":
+                status = automation.media_control(args)
+
+            elif action == "system_stats":
+                stats = automation.get_system_stats()
+                await websocket.send_text(json.dumps(stats))
+
+            # 4. Send Response to Frontend
             final_response = {
                 "type": "response",
                 "text": response_text,
                 "state": "speaking"
             }
-            
             await websocket.send_text(json.dumps(final_response))
                 
     except WebSocketDisconnect:
         print("Frontend Disconnected ❌")
     except Exception as e:
-        print(f"Critical Error: {e}")
+        print(f"Error: {e}")
