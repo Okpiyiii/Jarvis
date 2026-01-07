@@ -2,71 +2,166 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Jarvis Debugger</title>
+    <title>Jarvis Voice Interface</title>
     <style>
-        body { background-color: #1a1a1a; color: #00ffcc; font-family: monospace; text-align: center; padding: 50px; }
-        #status { font-size: 24px; margin-bottom: 20px; }
-        button { padding: 15px 30px; font-size: 20px; background: #00ffcc; border: none; cursor: pointer; border-radius: 5px; }
-        button:active { background: #009977; }
-        #log { margin-top: 20px; border: 1px solid #333; padding: 10px; height: 300px; overflow-y: scroll; text-align: left; background: #000; }
+        body { 
+            background-color: #0d0d0d; 
+            color: #00ffcc; 
+            font-family: 'Courier New', monospace; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            height: 100vh; 
+            margin: 0; 
+        }
+        
+        /* The Arc Reactor Circle */
+        #core {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: 5px solid #004444;
+            box-shadow: 0 0 20px #00ffcc33;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            margin-bottom: 30px;
+        }
+
+        /* Active State (When hearing "Jarvis") */
+        .active {
+            border-color: #00ffcc !important;
+            box-shadow: 0 0 50px #00ffcc, inset 0 0 20px #00ffcc !important;
+            transform: scale(1.1);
+        }
+
+        #status { font-size: 24px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; }
+        #log { width: 80%; height: 150px; overflow-y: auto; border-top: 1px solid #333; padding: 20px; font-size: 14px; color: #888; text-align: left; }
+        
+        .user-text { color: #fff; }
+        .jarvis-text { color: #00ffcc; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>🤖 Jarvis Core Debugger</h1>
-    <div id="status">🔴 Disconnected</div>
-    <button onclick="startListening()">🎤 Click & Speak</button>
+    <div id="core">
+        <div style="font-size: 50px;">⚛️</div>
+    </div>
+
+    <div id="status">🔴 OFFLINE</div>
+    <div style="margin-bottom: 20px; font-size: 12px; color: #555;">(Click anywhere to Start)</div>
+
     <div id="log"></div>
 
     <script>
-        // 1. Connect to WebSocket
-        const ws = new WebSocket("ws://localhost:8000/ws/chat");
+        // --- CONFIGURATION ---
+        const BACKEND_URL = "ws://localhost:8000/ws/chat"; // Change if using Ngrok
+        const WAKE_WORD = "jarvis"; 
+        // ---------------------
+
+        const ws = new WebSocket(BACKEND_URL);
+        const core = document.getElementById("core");
         const statusDiv = document.getElementById("status");
         const logDiv = document.getElementById("log");
+        let isSpeaking = false; // Don't listen while Jarvis is speaking
 
+        // 1. WebSocket Connection
         ws.onopen = () => {
-            statusDiv.innerHTML = "🟢 Connected to Brain";
-            log("System: Link Established.");
+            statusDiv.innerHTML = "🟢 SYSTEM READY";
+            statusDiv.style.color = "#00ffcc";
+            log("System: Connected to Neural Net.");
         };
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            log("🧠 Jarvis: " + JSON.stringify(data));
-
-            // Speak the response
-            if (data.type === "response" && data.text) {
+            
+            if (data.type === "response") {
+                log("🧠 Jarvis: " + data.text, "jarvis-text");
                 speak(data.text);
+            } else if (data.type === "system_stats") {
+                // Handle stats if you want (CPU/RAM)
+                console.log(data);
             }
         };
 
-        // 2. Voice Recognition (Web Speech API)
+        // 2. Voice Recognition (The Ears)
         const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new Recognition();
+        
+        recognition.continuous = true;  // Keep listening forever
         recognition.lang = 'en-US';
+        recognition.interimResults = false;
 
-        recognition.onstart = () => statusDiv.innerHTML = "👂 Listening...";
-        recognition.onend = () => statusDiv.innerHTML = "🟢 Connected (Idle)";
-
-        recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            log("🗣️ You: " + transcript);
-            
-            // Send to Backend
-            ws.send(JSON.stringify({ type: "command", text: transcript }));
+        recognition.onstart = () => {
+            statusDiv.innerHTML = "👂 LISTENING FOR 'JARVIS'...";
         };
 
-        function startListening() {
-            recognition.start();
-        }
+        recognition.onend = () => {
+            // If it stops, auto-restart (Always Listening)
+            if (!isSpeaking) recognition.start();
+        };
 
-        // 3. Text to Speech
+        recognition.onresult = (event) => {
+            if (isSpeaking) return; // Ignore input while Jarvis talks
+
+            const lastIndex = event.results.length - 1;
+            const transcript = event.results[lastIndex][0].transcript.trim().toLowerCase();
+            
+            console.log("Heard:", transcript);
+
+            // --- WAKE WORD LOGIC ---
+            if (transcript.includes(WAKE_WORD)) {
+                // Visual Effect
+                activateCore();
+                
+                log("🗣️ You: " + transcript, "user-text");
+                
+                // Send command to Backend
+                ws.send(JSON.stringify({ type: "command", text: transcript }));
+            }
+        };
+
+        // Start listening on first click (Browser policy)
+        document.body.onclick = () => {
+            recognition.start();
+            log("System: Audio Sensors Online.");
+        };
+
+        // 3. Text to Speech (The Mouth)
         function speak(text) {
+            isSpeaking = true; // Stop listening so he doesn't hear himself
+            recognition.stop(); 
+            
             const utterance = new SpeechSynthesisUtterance(text);
+            
+            // Optional: Choose a robotic voice
+            const voices = window.speechSynthesis.getVoices();
+            // Try to find a specific voice like "Google US English" or "Microsoft David"
+            utterance.voice = voices.find(v => v.name.includes("Google US English")) || voices[0];
+            
+            utterance.onend = () => {
+                isSpeaking = false;
+                recognition.start(); // Resume listening after speaking
+                deactivateCore();
+            };
+            
             window.speechSynthesis.speak(utterance);
         }
 
-        function log(msg) {
-            logDiv.innerHTML += `<div>${msg}</div>`;
+        function activateCore() {
+            core.classList.add("active");
+            statusDiv.innerHTML = "⚡ PROCESSING...";
+        }
+
+        function deactivateCore() {
+            core.classList.remove("active");
+            statusDiv.innerHTML = "👂 LISTENING...";
+        }
+
+        function log(msg, className="") {
+            logDiv.innerHTML += `<div class="${className}">${msg}</div>`;
             logDiv.scrollTop = logDiv.scrollHeight;
         }
     </script>
