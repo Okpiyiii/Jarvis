@@ -1,0 +1,38 @@
+/* Global Styles */
+
+html {
+    scroll-behavior: smooth;
+    height: 100%;
+}
+
+body {
+    height: 100%;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Optimization for animated elements */
+.hardware-accelerated {
+    will-change: transform, opacity;
+    transform: translateZ(0);
+}
+
+/* Scrollbar styling inspired by index.html */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(6, 182, 212, 0.2);
+    /* Cyan-ish */
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(6, 182, 212, 0.4);
+}
