@@ -1,0 +1,7 @@
+{
+  "name": "Aurora Assistant",
+  "description": "An immersive, 3D, voice-enabled personal assistant with a crystalline interface powered by Gemini.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
