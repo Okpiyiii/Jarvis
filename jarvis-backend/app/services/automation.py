@@ -3,6 +3,7 @@ import subprocess
 import psutil
 import platform
 import pyautogui
+import requests  # <--- NEW IMPORT
 
 class AutomationService:
     def get_system_stats(self):
@@ -24,7 +25,6 @@ class AutomationService:
 
     def open_app(self, app_name: str):
         """Opens apps (Windows Only)"""
-        # CLOUD SAFETY CHECK
         if platform.system() != "Windows":
             return f"I cannot open {app_name} because I am running on a Cloud Server."
 
@@ -37,7 +37,7 @@ class AutomationService:
                 subprocess.Popen("notepad")
                 return "Opening Notepad."
             elif "youtube" in app_name:
-                subprocess.Popen("start chrome [https://www.youtube.com](https://www.youtube.com)", shell=True)
+                subprocess.Popen("start chrome https://www.youtube.com", shell=True)
                 return "Opening YouTube."
             else:
                 return f"I don't know the path for {app_name} yet."
@@ -61,5 +61,24 @@ class AutomationService:
             return "Media command executed."
         except Exception as e:
             return f"Media error: {e}"
+
+    # --- NEW WEATHER FUNCTION ---
+    def get_weather(self, city: str):
+        """Fetches live weather from wttr.in"""
+        try:
+            if not city or city == "null": 
+                city = "Kolkata" # Default city if none mentioned
+            
+            # Requesting simplified format: Condition + Temperature
+            url = f"https://wttr.in/{city}?format=%C+%t"
+            response = requests.get(url)
+            
+            if response.status_code == 200:
+                weather_data = response.text.strip()
+                return f"The current weather in {city} is {weather_data}."
+            else:
+                return "I couldn't get the weather data right now."
+        except Exception as e:
+            return "I am unable to connect to the weather satellite, sir."
 
 automation = AutomationService()

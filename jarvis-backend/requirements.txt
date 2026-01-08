@@ -6,3 +6,4 @@ python-dotenv
 psutil
 motor
 pyautogui
+requests

@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Jarvis Voice Interface</title>
+    <title>Jarvis Interface (Stable)</title>
     <style>
         body { 
-            background-color: #0d0d0d; 
+            background-color: #000; 
             color: #00ffcc; 
             font-family: 'Courier New', monospace; 
             display: flex; 
@@ -13,184 +13,208 @@
             align-items: center; 
             justify-content: center; 
             height: 100vh; 
+            overflow: hidden;
             margin: 0; 
         }
         
-        /* The Arc Reactor Circle */
+        /* THE CORE */
         #core {
-            width: 150px;
-            height: 150px;
+            width: 120px;
+            height: 120px;
             border-radius: 50%;
-            border: 5px solid #004444;
-            box-shadow: 0 0 20px #00ffcc33;
+            border: 4px solid #003333;
+            box-shadow: 0 0 15px #00ffcc22;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.3s ease;
-            margin-bottom: 30px;
+            transition: all 0.2s ease;
+            margin-bottom: 20px;
             cursor: pointer;
+            font-size: 40px;
         }
 
-        /* Active State (When hearing "Jarvis") */
-        .active {
-            border-color: #00ffcc !important;
-            box-shadow: 0 0 50px #00ffcc, inset 0 0 20px #00ffcc !important;
+        /* STATES */
+        .listening {
+            border-color: #00ffcc;
+            box-shadow: 0 0 30px #00ffcc66;
+            animation: breathe 2s infinite ease-in-out;
+        }
+        .speaking {
+            border-color: #ff3300;
+            box-shadow: 0 0 50px #ff3300;
             transform: scale(1.1);
         }
-
-        .listening {
-            border-color: #00aa88;
-            animation: pulse 2s infinite;
+        .processing {
+            border-color: #ffff00;
+            box-shadow: 0 0 30px #ffff00;
+            animation: spin 1s infinite linear;
         }
 
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 #00aa8866; }
-            70% { box-shadow: 0 0 0 20px #00aa8800; }
-            100% { box-shadow: 0 0 0 0 #00aa8800; }
+        @keyframes breathe {
+            0% { box-shadow: 0 0 10px #00ffcc66; }
+            50% { box-shadow: 0 0 30px #00ffcc; }
+            100% { box-shadow: 0 0 10px #00ffcc66; }
         }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        #status { font-size: 24px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; }
-        #log { width: 80%; height: 150px; overflow-y: auto; border-top: 1px solid #333; padding: 20px; font-size: 14px; color: #888; text-align: left; }
-        
-        .user-text { color: #fff; }
-        .jarvis-text { color: #00ffcc; font-weight: bold; }
+        #status { font-size: 20px; font-weight: bold; margin-bottom: 10px; }
+        #log { 
+            width: 90%; max-width: 600px; height: 150px; 
+            overflow-y: auto; border-top: 1px solid #333; 
+            padding: 10px; font-size: 14px; color: #888; 
+            text-align: left; background: #111;
+        }
+        .user { color: #fff; }
+        .jarvis { color: #00ffcc; font-weight: bold; }
+        .error { color: #ff3300; }
     </style>
 </head>
 <body>
 
-    <div id="core" onclick="startSystem()">
-        <div style="font-size: 50px;">⚛️</div>
-    </div>
-
-    <div id="status">🔴 OFFLINE (Click Reactor)</div>
+    <div id="core" onclick="startSystem()">⚛️</div>
+    <div id="status">CLICK TO START</div>
     <div id="log"></div>
 
     <script>
-        // --- CONFIGURATION ---
-        const BACKEND_URL = "ws://localhost:8000/ws/chat"; 
-        const WAKE_WORD = "jarvis"; 
-        // ---------------------
+        // --- CONFIG ---
+        const BACKEND_URL = "ws://localhost:8000/ws/chat"; // Change to Ngrok URL if needed
+        const WAKE_WORD = "jarvis";
+        // --------------
 
-        const ws = new WebSocket(BACKEND_URL);
-        const core = document.getElementById("core");
-        const statusDiv = document.getElementById("status");
-        const logDiv = document.getElementById("log");
-        
-        let isSpeaking = false; 
+        let ws;
         let recognition;
+        let isSpeaking = false;
+        let micActive = false;
+        let speakTimeout;
 
-        // 1. WebSocket Connection
-        ws.onopen = () => {
-            log("System: Connected to Neural Net.");
-        };
+        const statusDiv = document.getElementById("status");
+        const core = document.getElementById("core");
+        const logDiv = document.getElementById("log");
 
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
+        // 1. CONNECT TO BACKEND
+        function connectWebSocket() {
+            ws = new WebSocket(BACKEND_URL);
             
-            if (data.type === "response") {
-                log("🧠 Jarvis: " + data.text, "jarvis-text");
-                speak(data.text);
-            } else if (data.type === "system_stats") {
-                console.log(data);
-            }
-        };
+            ws.onopen = () => log("System: Neural Link Established.");
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === "response") {
+                    log("🧠 Jarvis: " + data.text, "jarvis");
+                    speak(data.text);
+                }
+            };
 
-        // 2. Voice Recognition Setup
-        function setupVoice() {
+            ws.onclose = () => {
+                log("System: Disconnected. Retrying...", "error");
+                setTimeout(connectWebSocket, 3000); // Auto-reconnect
+            };
+        }
+
+        // 2. SETUP MICROPHONE (The Ears)
+        function setupMic() {
             const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!Recognition) {
+                alert("Browser not supported. Use Chrome.");
+                return;
+            }
+
             recognition = new Recognition();
-            
-            recognition.continuous = true; 
-            recognition.lang = 'en-US';
+            recognition.continuous = true; // Keep listening
             recognition.interimResults = false;
+            recognition.lang = 'en-US';
 
             recognition.onstart = () => {
-                if (!isSpeaking) {
-                    statusDiv.innerHTML = "👂 LISTENING...";
-                    core.classList.add("listening");
-                }
+                micActive = true;
+                if (!isSpeaking) setVisuals("listening");
             };
 
             recognition.onend = () => {
-                // AUTO-RESTART: Only restart if we are NOT currently speaking
+                micActive = false;
+                // If we aren't speaking, microphone died unexpectedly. RESUSCITATE IT!
                 if (!isSpeaking) {
-                    console.log("Mic stopped. Restarting...");
-                    try { recognition.start(); } catch(e) {}
-                }
-            };
-
-            recognition.onerror = (event) => {
-                console.warn("Speech Error:", event.error);
-                // Ignore 'no-speech' errors, just stay alive
-                if (event.error === 'not-allowed') {
-                    statusDiv.innerHTML = "❌ MIC BLOCKED";
+                    console.log("Mic died. Restarting...");
+                    setVisuals("error"); // Flash red briefly
+                    setTimeout(() => { try { recognition.start(); } catch(e){} }, 500);
                 }
             };
 
             recognition.onresult = (event) => {
-                if (isSpeaking) return; 
+                if (isSpeaking) return;
 
-                const lastIndex = event.results.length - 1;
-                const transcript = event.results[lastIndex][0].transcript.trim().toLowerCase();
+                const last = event.results.length - 1;
+                const text = event.results[last][0].transcript.trim().toLowerCase();
                 
-                console.log("Heard:", transcript);
+                console.log("Heard:", text);
 
-                // Check for Wake Word
-                if (transcript.includes(WAKE_WORD)) {
-                    activateCore();
-                    log("🗣️ You: " + transcript, "user-text");
-                    ws.send(JSON.stringify({ type: "command", text: transcript }));
+                if (text.includes(WAKE_WORD)) {
+                    setVisuals("processing");
+                    log("🗣️ You: " + text, "user");
+                    
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: "command", text: text }));
+                    } else {
+                        log("Error: Backend offline", "error");
+                    }
                 }
             };
         }
 
-        // 3. Text to Speech (The Mouth)
+        // 3. TEXT TO SPEECH (The Mouth)
         function speak(text) {
-            isSpeaking = true; 
-            try { recognition.stop(); } catch(e) {} // Stop listening
+            isSpeaking = true;
+            try { recognition.stop(); } catch(e){} // Stop mic to prevent echo
             
-            core.classList.remove("listening");
-            core.classList.add("active");
-            statusDiv.innerHTML = "🗣️ SPEAKING...";
+            setVisuals("speaking");
+            statusDiv.innerText = "SPEAKING...";
 
             const utterance = new SpeechSynthesisUtterance(text);
-            const voices = window.speechSynthesis.getVoices();
-            utterance.voice = voices.find(v => v.name.includes("Google US English")) || voices[0];
             
-            utterance.onend = () => {
-                console.log("Finished speaking. Resuming listening...");
+            // Safety: If speaking gets stuck for 15s, kill it and reset
+            clearTimeout(speakTimeout);
+            speakTimeout = setTimeout(() => {
+                console.warn("TTS Stuck. Forcing reset.");
                 isSpeaking = false;
-                deactivateCore();
-                
-                // Add a tiny delay to ensure mic is ready
-                setTimeout(() => {
-                    try { recognition.start(); } catch(e) {}
-                }, 200);
+                try { recognition.start(); } catch(e){}
+            }, 15000);
+
+            utterance.onend = () => {
+                clearTimeout(speakTimeout);
+                isSpeaking = false;
+                // Resume listening instantly
+                try { recognition.start(); } catch(e){}
             };
-            
+
             window.speechSynthesis.speak(utterance);
         }
 
-        function activateCore() {
-            core.classList.add("active");
-            core.classList.remove("listening");
-            statusDiv.innerHTML = "⚡ PROCESSING...";
+        // 4. UTILITIES
+        function setVisuals(state) {
+            core.className = ""; // Reset
+            core.classList.add(state);
+            
+            if(state === "listening") statusDiv.innerText = "LISTENING...";
+            if(state === "processing") statusDiv.innerText = "THINKING...";
+            if(state === "error") statusDiv.innerText = "RESTARTING...";
         }
 
-        function deactivateCore() {
-            core.classList.remove("active");
-            core.classList.add("listening");
-            statusDiv.innerHTML = "👂 LISTENING...";
-        }
-
-        function log(msg, className="") {
-            logDiv.innerHTML += `<div class="${className}">${msg}</div>`;
+        function log(msg, cls = "") {
+            logDiv.innerHTML += `<div class="${cls}">${msg}</div>`;
             logDiv.scrollTop = logDiv.scrollHeight;
         }
 
         function startSystem() {
-            setupVoice();
-            try { recognition.start(); } catch(e) { console.log("Already started"); }
+            connectWebSocket();
+            setupMic();
+            try { recognition.start(); } catch(e){}
+            
+            // Watchdog: Check every 5 seconds if mic is alive
+            setInterval(() => {
+                if (!micActive && !isSpeaking) {
+                    console.log("Watchdog: Restarting mic...");
+                    try { recognition.start(); } catch(e){}
+                }
+            }, 5000);
         }
     </script>
 </body>
