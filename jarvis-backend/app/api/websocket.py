@@ -2,6 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
 from app.services.brain import brain
 from app.services.automation import automation
+from app.services.memory import memory # Import memory to save final answer
 
 router = APIRouter()
 
@@ -12,7 +13,7 @@ async def websocket_endpoint(websocket: WebSocket):
     
     try:
         while True:
-            # 1. Receive Text from Frontend
+            # 1. Receive Text
             data = await websocket.receive_text()
             try:
                 message = json.loads(data)
@@ -31,9 +32,11 @@ async def websocket_endpoint(websocket: WebSocket):
             action = decision.get("action")
             args = decision.get("args")
 
+            # --- ACTION HANDLERS ---
+            
             if action == "open_app":
                 status = automation.open_app(args)
-                # Optional: Append status to reply if needed
+                # We can append status to the reply if needed
                 
             elif action == "media_control":
                 status = automation.media_control(args)
@@ -41,8 +44,21 @@ async def websocket_endpoint(websocket: WebSocket):
             elif action == "system_stats":
                 stats = automation.get_system_stats()
                 await websocket.send_text(json.dumps(stats))
+                continue # Skip standard reply for stats
 
-            # 4. Send Response to Frontend
+            elif action == "weather":
+                # Execute Weather Tool
+                weather_report = automation.get_weather(args)
+                # Overwrite the AI's placeholder reply with the REAL data
+                response_text = weather_report
+
+            # -----------------------
+
+            # 4. Save the Final Response to Memory
+            # (So he remembers he just told you the weather)
+            await memory.add_message("model", response_text)
+
+            # 5. Send Response to Frontend
             final_response = {
                 "type": "response",
                 "text": response_text,

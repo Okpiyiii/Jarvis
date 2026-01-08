@@ -1,0 +1,3 @@
+@echo off
+echo Starting Jarvis Frontend...
+npm run dev

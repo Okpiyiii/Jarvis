@@ -10,12 +10,18 @@ interface ChatInterfaceProps {
   onSendMessage: (text: string) => void;
   lastResponse: string | null;
   className?: string;
+  isListening?: boolean;
+  onVoiceToggle?: () => void;
+  hasRecognitionSupport?: boolean;
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   state,
   onSendMessage,
-  lastResponse
+  lastResponse,
+  isListening = false,
+  onVoiceToggle,
+  hasRecognitionSupport = false
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [showInput, setShowInput] = useState(false);
@@ -58,14 +64,44 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Bottom Control Bar */}
       <div className="pointer-events-auto flex flex-col items-center gap-4">
 
+        {/* Voice Status Indicator */}
+        {isListening && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex items-center gap-2 bg-red-500/20 border border-red-500/50 px-4 py-2 rounded-full backdrop-blur-md"
+          >
+            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            <span className="text-red-200 text-xs font-mono tracking-wider">LISTENING...</span>
+          </motion.div>
+        )}
+
+        {/* Voice Toggle Button */}
+        {hasRecognitionSupport && onVoiceToggle && !showInput && (
+          <button
+            onClick={onVoiceToggle}
+            className={`p-4 rounded-full transition-all ${
+              isListening 
+                ? 'bg-red-500/30 border-2 border-red-500 animate-pulse' 
+                : 'bg-cyan-500/20 border border-cyan-500/50 hover:bg-cyan-500/40'
+            }`}
+            title={isListening ? "Stop Listening" : "Start Voice Input"}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+          </button>
+        )}
+
         {/* Input Toggle */}
-        {!showInput && (
+        {!showInput && !isListening && (
           <button
             onClick={() => setShowInput(true)}
             className="text-white/20 hover:text-white/60 transition-colors"
+            title="Type Message"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           </button>
         )}
